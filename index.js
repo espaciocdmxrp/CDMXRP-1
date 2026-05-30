@@ -9,7 +9,7 @@ const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/151034528819852503
 const PORT = process.env.PORT || 3000;
 
 // ⚠️ PEGA AQUÍ TU API KEY DEL JUEGO ENTRE LAS COMILLAS PARA QUE LEA LAS LLAMADAS:
-const ERLC_API_KEY = "TU_API_KEY_AQUI"; 
+const ERLC_API_KEY = "fapOHYvaTYVPssdYfnpx-SzrMGYcWKaFWYMhRrdZBDsEWefbqgbMfdqQScLGE"; 
 
 // Guardamos las IDs de las llamadas procesadas para no repetir mensajes en Discord
 let llamadasProcesadas = new Set();
