@@ -81,7 +81,7 @@ async function consultarEmergencias() {
                                 { name: "💬 Reporte / ¿Qué pasó?", value: `\`\`\`text\n${quePaso}\n\`\`\`` },
                                 { name: "📍 Ubicación o Calle", value: `\`\`\`text\n${ubicacion}\n\`\`\`` }
                             ],
-                            footer: { text: `Llamada N° ${llamada.CallNumber} - api.erlc.gg` },
+                            footer: { text: "Espacio CDMXRP" },
                             timestamp: new Date().toISOString()
                         }]
                     };
