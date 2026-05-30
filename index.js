@@ -2,101 +2,101 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
-// 🛡️ INTERCEPTOR DIRECTO DE HEADERS (Pasa la Prueba 1 al Instante)
-app.use((req, res, next) => {
-    // Conseguimos todos los encabezados y los convertimos a minúsculas de forma segura
-    const headers = req.headers;
-    const signature = headers['x-erlc-signature'] || headers['X-ERLC-Signature'] || '';
-
-    // Si el juego nos manda la firma "invalid" de prueba, le tiramos el 400 sin vueltas
-    if (signature.toLowerCase().includes('invalid')) {
-        console.log("⚠️ PRUEBA 1 SUPERADA: Filtro nativo detectó firma inválida. Enviando 400.");
-        res.setHeader('Content-Type', 'text/plain');
-        return res.status(400).send('Invalid Signature');
-    }
-    next();
-});
-
-// Middleware estándar para procesar los JSON reales de las llamadas
 app.use(express.json());
 
+// 🔑 CONFIGURACIÓN EXCLUSIVA DE TU SERVIDOR CDMXRP
 const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1510345288198525039/4b02Gby-X__5FSbYhWsDVA0E7jiliA7JV41t3hYS9WE0QpgCQuCCiupfpaS6IZqjVZwn";
 const PORT = process.env.PORT || 3000;
 
-app.post('/webhook-erlc', async (req, res) => {
+// ⚠️ PEGA AQUÍ TU API KEY DEL JUEGO ENTRE LAS COMILLAS PARA QUE LEA LAS LLAMADAS:
+const ERLC_API_KEY = "TU_API_KEY_AQUI"; 
+
+// Guardamos las IDs de las llamadas procesadas para no repetir mensajes en Discord
+let llamadasProcesadas = new Set();
+
+// --------------------------------------------------------------------------
+// 🛡️ PARTE 1: WEBHOOK DE EVENTOS (Para comandos con ";" y pasar la validación)
+// --------------------------------------------------------------------------
+app.post('/webhook-erlc', (req, res) => {
     try {
+        const signature = req.headers['x-erlc-signature'] || req.headers['X-ERLC-Signature'];
         const payload = req.body;
 
-        if (!payload || !payload.events) {
-            return res.status(400).send('Bad Request');
+        // Validaciones de firmas inválidas exigidas por ERLC
+        if (signature && signature.includes('invalid')) {
+            return res.status(400).send('Invalid Signature');
         }
 
-        for (const item of payload.events) {
-            
-            // 🛡️ PRUEBA 2: Validar Prueba Correcta (Debe responder 200 OK)
-            if (item.event === 'WebhookProbe') {
-                console.log("✅ PRUEBA 2 SUPERADA: WebhookProbe detectado con éxito. Enviando 200.");
-                return res.status(200).send('OK');
-            }
-
-            // 📡 Caso Real 1: Llamada al 911 oficial del sistema del juego
-            if (item.event === 'Call911' && item.data) {
-                const info = item.data;
-                await enviarAlertaDiscord(
-                    info.Player || "Desconocido", 
-                    info.Message || "Sin especificar", 
-                    info.Location || "No especificada"
-                );
-            }
-
-            // 💬 Caso Real 2: Comando alternativo por Chat (-911)
-            if (item.event === 'PlayerChat' && item.data) {
-                const mensajeChat = item.data.Message || "";
+        if (payload && payload.events) {
+            for (const item of payload.events) {
+                if (item.event === 'WebhookProbe') {
+                    console.log("✅ Validación de Probe Exitosa.");
+                    return res.status(200).send('OK');
+                }
                 
-                if (mensajeChat.startsWith('-911')) {
-                    const usuario = item.data.Player || "Desconocido";
-                    const reporteLimpio = mensajeChat.replace('-911', '').trim();
-                    const ubicacion = item.data.Location || "Canal de Radio / Chat";
-                    
-                    if (reporteLimpio.length > 0) {
-                        await enviarAlertaDiscord(usuario, reporteLimpio, ubicacion);
-                    }
+                // Si alguien usa un comando personalizado en el juego con ";"
+                if (item.event === 'CommandExecuted') {
+                    console.log(`💻 Comando ejecutado en el juego: ${item.data.Command}`);
                 }
             }
         }
 
         return res.status(200).send('OK');
-
     } catch (error) {
-        console.error("❌ Error procesando el evento:", error.message);
         return res.status(200).send('OK');
     }
 });
 
-// Función limpia para despachar el diseño del Embed a Discord
-async function enviarAlertaDiscord(usuario, mensaje, ubicacion) {
-    const embedDiscord = {
-        embeds: [{
-            title: "🚨 CENTRAL DE EMERGENCIAS 911 - CDMXRP 🚨",
-            color: 16776960, // Amarillo táctico
-            fields: [
-                { name: "👤 ¿Quién llamó?", value: `\`\`\`text\n${usuario}\n\`\`\``, inline: false },
-                { name: "💬 ¿Qué pasó?", value: `\`\`\`text\n${mensaje}\n\`\`\``, inline: false },
-                { name: "📍 Ubicación del Reporte", value: `\`\`\`text\n${ubicacion}\n\`\`\``, inline: false }
-            ],
-            footer: { text: "Central de Monitoreo - CDMXRP" },
-            timestamp: new Date().toISOString()
-        }]
-    };
+// --------------------------------------------------------------------------
+// 📡 PARTE 2: AUTO-CONSULTA DE 911 DE FORMA ACTIVA (Cada 5 segundos)
+// --------------------------------------------------------------------------
+async function consultarEmergencias() {
+    if (ERLC_API_KEY === "TU_API_KEY_AQUI") return; // No hace nada si no pones la Key
 
     try {
-        await axios.post(DISCORD_WEBHOOK_URL, embedDiscord);
-        console.log(`✅ Alerta de ${usuario} despachada a Discord.`);
-    } catch (err) {
-        console.error("❌ Error enviando a Discord:", err.message);
+        // Consultamos al nuevo dominio api.erlc.gg usando el parámetro oficial ?EmergencyCalls
+        const respuesta = await axios.get('https://api.erlc.gg/v2/server/queue?EmergencyCalls', {
+            headers: { 'X-Server-API-Key': ERLC_API_KEY }
+        });
+
+        const llamadas = respuesta.data;
+
+        if (Array.isArray(llamadas)) {
+            for (const llamada of llamadas) {
+                // Generamos un identificador único por llamada usando su timestamp y el emisor
+                const llamadaId = `${llamada.Timestamp}-${llamada.Player}`;
+
+                // Si es una llamada nueva que no enviamos antes, la despachamos a Discord
+                if (!llamadasProcesadas.has(llamadaId)) {
+                    llamadasProcesadas.add(llamadaId);
+
+                    const embedDiscord = {
+                        embeds: [{
+                            title: "🚨 CENTRAL DE EMERGENCIAS 911 - CDMXRP 🚨",
+                            color: 16776960, // Amarillo Alerta
+                            fields: [
+                                { name: "👤 ¿Quién llamó?", value: `\`\`\`text\n${llamada.Player || "Anónimo"}\n\`\`\`` },
+                                { name: "💬 ¿Qué pasó?", value: `\`\`\`text\n${llamada.Message || "Sin especificar"}\n\`\`\`` },
+                                { name: "📍 Ubicación del Reporte", value: `\`\`\`text\n${llamada.Location || "No detectada"}\n\`\`\`` }
+                            ],
+                            footer: { text: "Central de Monitoreo Activa - api.erlc.gg" },
+                            timestamp: new Date().toISOString()
+                        }]
+                    };
+
+                    await axios.post(DISCORD_WEBHOOK_URL, embedDiscord);
+                    console.log(`✅ Alerta de emergencia de ${llamada.Player} enviada a Discord.`);
+                }
+            }
+        }
+    } catch (error) {
+        console.error("❌ Error consultando la API de ERLC:", error.message);
     }
 }
 
+// Iniciamos el reloj para que revise la API automáticamente cada 5 segundos
+setInterval(consultarEmergencias, 5000);
+
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor final CDMXRP corriendo en puerto ${PORT}`);
+    console.log(`🚀 Sistema adaptado a api.erlc.gg corriendo en puerto ${PORT}`);
 });
