@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3000;
 let llamadasProcesadas = new Set();
 
 // --------------------------------------------------------------------------
-// 🛡️ WEBHOOK DE EVENTOS (Mantiene el vínculo vivo con Roblox)
+// 🛡️ WEBHOOK DE EVENTOS (Mantiene el canal de comunicación vivo con Roblox)
 // --------------------------------------------------------------------------
 app.post('/webhook-erlc', (req, res) => {
     try {
@@ -39,63 +39,70 @@ app.post('/webhook-erlc', (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// 📡 EXTRACTOR DE 911 (URL Base Limpia oficial de la V2)
+// 📡 EXTRACTOR DE 911 (Estructura oficial V2 de tu documento)
 // --------------------------------------------------------------------------
 async function consultarEmergencias() {
     if (!ERLC_API_KEY || !DISCORD_WEBHOOK_URL) return; 
 
     try {
-        // 💎 SOLUCIÓN: Ruta exacta `/v2/server` tal cual exige el punto 3 de tu manual
-        const respuesta = await axios.get('https://api.erlc.gg/v2/server', {
+        // 💎 LA SOLUCIÓN REY: URL con el parámetro exacto (=true) y cabecera 'server-key'
+        const respuesta = await axios.get('https://api.erlc.gg/v2/server?EmergencyCalls=true', {
             headers: { 
                 'server-key': ERLC_API_KEY.trim() 
             }
         });
 
-        // En la v2, si pasás la key, la respuesta del estado del servidor trae adentro la lista de llamadas activas
+        // La API v2 devuelve el objeto global del servidor
         const datosServidor = respuesta.data;
         
-        // Buscamos si dentro de la data viene el array de llamadas de emergencia
-        const llamadas = datosServidor.EmergencyCalls || datosServidor.queue || datosServidor;
+        // Extraemos la lista específica de llamadas de emergencia (EmergencyCalls)
+        const llamadas = datosServidor.EmergencyCalls;
 
         if (Array.isArray(llamadas) && llamadas.length > 0) {
             for (const llamada of llamadas) {
-                const llamadaId = `${llamada.Timestamp}-${llamada.Player}`;
+                // Generamos una ID única combinando el número de llamada y el momento de inicio
+                const llamadaId = `${llamada.CallNumber}-${llamada.StartedAt}`;
 
                 if (!llamadasProcesadas.has(llamadaId)) {
                     llamadasProcesadas.add(llamadaId);
 
+                    // Mapeamos los datos según los atributos de tu documento:
+                    const idLlamador = llamada.Caller || "Desconocido";
+                    const quePaso = llamada.Description || "Sin descripción";
+                    const ubicacion = llamada.PositionDescriptor || "Ubicación desconocida";
+                    const equipo = llamada.Team || "Emergencia";
+
                     const embedDiscord = {
                         embeds: [{
-                            title: "🚨 CENTRAL DE EMERGENCIAS 911 - CDMXRP 🚨",
-                            color: 16776960, 
+                            title: `🚨 CENTRAL 911 [${equipo.toUpperCase()}] - CDMXRP 🚨`,
+                            color: 16776960, // Amarillo táctico
                             fields: [
-                                { name: "👤 ¿Quién llamó?", value: `\`\`\`text\n${llamada.Player || "Anónimo"}\n\`\`\`` },
-                                { name: "💬 ¿Qué pasó?", value: `\`\`\`text\n${llamada.Message || "Sin especificar"}\n\`\`\`` },
-                                { name: "📍 Ubicación del Reporte", value: `\`\`\`text\n${llamada.Location || "No detectada"}\n\`\`\`` }
+                                { name: "👤 ID del Reportante", value: `\`\`\`text\nID: ${idLlamador}\n\`\`\`` },
+                                { name: "💬 Reporte / ¿Qué pasó?", value: `\`\`\`text\n${quePaso}\n\`\`\`` },
+                                { name: "📍 Ubicación o Calle", value: `\`\`\`text\n${ubicacion}\n\`\`\`` }
                             ],
-                            footer: { text: "Central de Monitoreo Activa - api.erlc.gg" },
+                            footer: { text: `Llamada N° ${llamada.CallNumber} - api.erlc.gg` },
                             timestamp: new Date().toISOString()
                         }]
                     };
 
                     await axios.post(DISCORD_WEBHOOK_URL, embedDiscord);
-                    console.log(`✅ Alerta de emergencia de ${llamada.Player} enviada a Discord.`);
+                    console.log(`✅ Alerta N° ${llamada.CallNumber} enviada a Discord con éxito.`);
                 }
             }
         }
     } catch (error) {
         if (error.response) {
-            console.error(`❌ API ERLC rechazó la consulta. Estado: [${error.response.status}].`);
+            console.error(`❌ Error API ERLC: Código [${error.response.status}]`);
         } else {
-            console.error("❌ Error de red:", error.message);
+            console.error("❌ Error de comunicación:", error.message);
         }
     }
 }
 
-// Escanea la API cada 5 segundos
+// Revisa el servidor cada 5 segundos
 setInterval(consultarEmergencias, 5000);
 
 app.listen(PORT, () => {
-    console.log(`🚀 Central Operativa V2 calibrada en puerto ${PORT}`);
+    console.log(`🚀 Sistema V2 adaptado al manual corriendo en puerto ${PORT}`);
 });
