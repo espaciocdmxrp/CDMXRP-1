@@ -9,11 +9,11 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK;
 const ERLC_API_KEY = process.env.ERLC_KEY; 
 const PORT = process.env.PORT || 3000;
 
-// Registro para no duplicar alertas en tu Discord
+// Registro para no duplicar las alertas en Discord
 let llamadasProcesadas = new Set();
 
 // --------------------------------------------------------------------------
-// 🛡️ WEBHOOK DE EVENTOS (Mantiene el canal de comunicación vivo con Roblox)
+// 🛡️ WEBHOOK DE EVENTOS (Mantiene el vínculo vivo con Roblox)
 // --------------------------------------------------------------------------
 app.post('/webhook-erlc', (req, res) => {
     try {
@@ -39,26 +39,27 @@ app.post('/webhook-erlc', (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// 📡 EXTACTOR AUTOMÁTICO DE 911 (Usando el header oficial: 'server-key')
+// 📡 EXTRACTOR DE 911 (URL Base Limpia oficial de la V2)
 // --------------------------------------------------------------------------
 async function consultarEmergencias() {
     if (!ERLC_API_KEY || !DISCORD_WEBHOOK_URL) return; 
 
     try {
-        // Consultamos la cola del servidor con el parámetro oficial de llamadas
-        const respuesta = await axios.get('https://api.erlc.gg/v2/server/queue?EmergencyCalls', {
+        // 💎 SOLUCIÓN: Ruta exacta `/v2/server` tal cual exige el punto 3 de tu manual
+        const respuesta = await axios.get('https://api.erlc.gg/v2/server', {
             headers: { 
-                // 💎 ARREGLO DE ORO: El header exacto que exige la documentación oficial V2
                 'server-key': ERLC_API_KEY.trim() 
             }
         });
 
-        const llamadas = respuesta.data;
+        // En la v2, si pasás la key, la respuesta del estado del servidor trae adentro la lista de llamadas activas
+        const datosServidor = respuesta.data;
+        
+        // Buscamos si dentro de la data viene el array de llamadas de emergencia
+        const llamadas = datosServidor.EmergencyCalls || datosServidor.queue || datosServidor;
 
-        // Si la API nos devuelve llamadas, las procesamos una por una
         if (Array.isArray(llamadas) && llamadas.length > 0) {
             for (const llamada of llamadas) {
-                // Generamos una ID única mezclando tiempo y jugador para evitar repeticiones
                 const llamadaId = `${llamada.Timestamp}-${llamada.Player}`;
 
                 if (!llamadasProcesadas.has(llamadaId)) {
@@ -67,7 +68,7 @@ async function consultarEmergencias() {
                     const embedDiscord = {
                         embeds: [{
                             title: "🚨 CENTRAL DE EMERGENCIAS 911 - CDMXRP 🚨",
-                            color: 16776960, // Amarillo Alerta
+                            color: 16776960, 
                             fields: [
                                 { name: "👤 ¿Quién llamó?", value: `\`\`\`text\n${llamada.Player || "Anónimo"}\n\`\`\`` },
                                 { name: "💬 ¿Qué pasó?", value: `\`\`\`text\n${llamada.Message || "Sin especificar"}\n\`\`\`` },
@@ -92,9 +93,9 @@ async function consultarEmergencias() {
     }
 }
 
-// Escanea los servidores de ERLC activamente cada 5 segundos
+// Escanea la API cada 5 segundos
 setInterval(consultarEmergencias, 5000);
 
 app.listen(PORT, () => {
-    console.log(`🚀 Central Operativa V2 activa y blindada en puerto ${PORT}`);
+    console.log(`🚀 Central Operativa V2 calibrada en puerto ${PORT}`);
 });
