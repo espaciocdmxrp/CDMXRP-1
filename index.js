@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3000;
 let llamadasProcesadas = new Set();
 
 // --------------------------------------------------------------------------
-// 🛡️ WEBHOOK DE EVENTOS (Mantiene el vínculo vivo en el panel de Roblox)
+// 🛡️ WEBHOOK DE EVENTOS (Vínculo vivo con el panel de Roblox)
 // --------------------------------------------------------------------------
 app.post('/webhook-erlc', (req, res) => {
     try {
@@ -39,14 +39,14 @@ app.post('/webhook-erlc', (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// 📡 RELOJ CONSULTOR (Ruta corregida para api.erlc.gg)
+// 📡 RELOJ CONSULTOR (Ruta combinada según especificaciones del anuncio)
 // --------------------------------------------------------------------------
 async function consultarEmergencias() {
     if (!ERLC_API_KEY || !DISCORD_WEBHOOK_URL) return; 
 
     try {
-        // RUTA CORREGIDA: Apuntamos directamente al recurso de llamadas del servidor privado
-        const respuesta = await axios.get('https://api.erlc.gg/v2/server/emergencycalls', {
+        // RUTA COMBINADA: Mantenemos la cola base pero inyectamos el query parameter del 911
+        const respuesta = await axios.get('https://api.erlc.gg/v2/server/queue?EmergencyCalls', {
             headers: { 'X-Server-API-Key': ERLC_API_KEY }
         });
 
@@ -54,7 +54,6 @@ async function consultarEmergencias() {
 
         if (Array.isArray(llamadas) && llamadas.length > 0) {
             for (const llamada of llamadas) {
-                // Generamos una ID única mezclando tiempo y jugador
                 const llamadaId = `${llamada.Timestamp}-${llamada.Player}`;
 
                 if (!llamadasProcesadas.has(llamadaId)) {
@@ -63,7 +62,7 @@ async function consultarEmergencias() {
                     const embedDiscord = {
                         embeds: [{
                             title: "🚨 CENTRAL DE EMERGENCIAS 911 - CDMXRP 🚨",
-                            color: 16776960, // Amarillo policial
+                            color: 16776960, 
                             fields: [
                                 { name: "👤 ¿Quién llamó?", value: `\`\`\`text\n${llamada.Player || "Anónimo"}\n\`\`\`` },
                                 { name: "💬 ¿Qué pasó?", value: `\`\`\`text\n${llamada.Message || "Sin especificar"}\n\`\`\`` },
@@ -80,12 +79,11 @@ async function consultarEmergencias() {
             }
         }
     } catch (error) {
-        // Controlamos si la API responde con errores de límite o rutas
         console.error("❌ Error de comunicación con la API de ERLC:", error.message);
     }
 }
 
-// Mantiene la búsqueda activa cada 5 segundos de forma silenciosa
+// Revisa la API cada 5 segundos
 setInterval(consultarEmergencias, 5000);
 
 app.listen(PORT, () => {
