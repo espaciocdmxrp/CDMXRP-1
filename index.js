@@ -4,16 +4,16 @@ const app = express();
 
 app.use(express.json());
 
-// 🔒 VARIABLES OCULTAS Y BLINDADAS
+// 🔒 VARIABLES OCULTAS EN RENDER
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK;
 const ERLC_API_KEY = process.env.ERLC_KEY; 
 const PORT = process.env.PORT || 3000;
 
-// Registro para no duplicar las alertas en Discord
+// Registro para no duplicar alertas en tu Discord
 let llamadasProcesadas = new Set();
 
 // --------------------------------------------------------------------------
-// 🛡️ WEBHOOK DE EVENTOS (Vínculo vivo con el panel de Roblox)
+// 🛡️ WEBHOOK DE EVENTOS (Mantiene el canal de comunicación vivo con Roblox)
 // --------------------------------------------------------------------------
 app.post('/webhook-erlc', (req, res) => {
     try {
@@ -39,21 +39,26 @@ app.post('/webhook-erlc', (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// 📡 RELOJ CONSULTOR (Ruta combinada según especificaciones del anuncio)
+// 📡 EXTACTOR AUTOMÁTICO DE 911 (Usando el header oficial: 'server-key')
 // --------------------------------------------------------------------------
 async function consultarEmergencias() {
     if (!ERLC_API_KEY || !DISCORD_WEBHOOK_URL) return; 
 
     try {
-        // RUTA COMBINADA: Mantenemos la cola base pero inyectamos el query parameter del 911
+        // Consultamos la cola del servidor con el parámetro oficial de llamadas
         const respuesta = await axios.get('https://api.erlc.gg/v2/server/queue?EmergencyCalls', {
-            headers: { 'X-Server-API-Key': ERLC_API_KEY }
+            headers: { 
+                // 💎 ARREGLO DE ORO: El header exacto que exige la documentación oficial V2
+                'server-key': ERLC_API_KEY.trim() 
+            }
         });
 
         const llamadas = respuesta.data;
 
+        // Si la API nos devuelve llamadas, las procesamos una por una
         if (Array.isArray(llamadas) && llamadas.length > 0) {
             for (const llamada of llamadas) {
+                // Generamos una ID única mezclando tiempo y jugador para evitar repeticiones
                 const llamadaId = `${llamada.Timestamp}-${llamada.Player}`;
 
                 if (!llamadasProcesadas.has(llamadaId)) {
@@ -62,7 +67,7 @@ async function consultarEmergencias() {
                     const embedDiscord = {
                         embeds: [{
                             title: "🚨 CENTRAL DE EMERGENCIAS 911 - CDMXRP 🚨",
-                            color: 16776960, 
+                            color: 16776960, // Amarillo Alerta
                             fields: [
                                 { name: "👤 ¿Quién llamó?", value: `\`\`\`text\n${llamada.Player || "Anónimo"}\n\`\`\`` },
                                 { name: "💬 ¿Qué pasó?", value: `\`\`\`text\n${llamada.Message || "Sin especificar"}\n\`\`\`` },
@@ -79,13 +84,17 @@ async function consultarEmergencias() {
             }
         }
     } catch (error) {
-        console.error("❌ Error de comunicación con la API de ERLC:", error.message);
+        if (error.response) {
+            console.error(`❌ API ERLC rechazó la consulta. Estado: [${error.response.status}].`);
+        } else {
+            console.error("❌ Error de red:", error.message);
+        }
     }
 }
 
-// Revisa la API cada 5 segundos
+// Escanea los servidores de ERLC activamente cada 5 segundos
 setInterval(consultarEmergencias, 5000);
 
 app.listen(PORT, () => {
-    console.log(`🚀 Central Operativa Blindada activa en puerto ${PORT}`);
+    console.log(`🚀 Central Operativa V2 activa y blindada en puerto ${PORT}`);
 });
