@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 3000;
 
 app.post('/webhook-erlc', async (req, res) => {
     try {
+        // 🛡️ Filtro de seguridad para que Roblox valide la URL con éxito
         const signature = req.headers['x-erlc-signature'] || req.headers['X-ERLC-Signature'];
         if (signature && signature.includes('invalid')) {
             return res.status(400).send('Invalid Signature Probe');
@@ -19,38 +20,65 @@ app.post('/webhook-erlc', async (req, res) => {
             return res.status(400).send('Empty Body');
         }
 
-        const data = JSON.parse(bodyString);
-        console.log("📥 Paquete en Render:", bodyString);
+        const payload = JSON.parse(bodyString);
 
-        // CONFIGURACIÓN DE INSPECCIÓN: Dejamos pasar TODO a Discord para ver cómo viene estructurado
-        const usuario = data.Player || data.User || "No detectado";
-        const mensaje = data.Message || data.Text || "Sin texto directo";
-        const ubicacion = data.Location || "No detectada";
+        // Verificamos si el paquete contiene la lista de eventos nativa de ERLC
+        if (payload.events && Array.isArray(payload.events)) {
+            for (const item of payload.events) {
+                
+                // 1. Ignoramos los Probes de prueba repetidos para no saturar Discord
+                if (item.event === 'WebhookProbe') {
+                    console.log("ℹ️ Probe de validación ignorado correctamente.");
+                    continue;
+                }
 
-        const embedDiscord = {
-            embeds: [{
-                title: "🔍 INSPECCIÓN DE ENTRADA ERLC 🔍",
-                color: 3447003, // Azul para diferenciarlo de las alertas finales
-                fields: [
-                    { name: "👤 Jugador / Variable 'Player'", value: `\`\`\`text\n${usuario}\n\`\`\`` },
-                    { name: "💬 Mensaje / Variable 'Message'", value: `\`\`\`text\n${mensaje}\n\`\`\`` },
-                    { name: "📍 Ubicación / Variable 'Location'", value: `\`\`\`text\n${ubicacion}\n\`\`\`` },
-                    { name: "📦 DATOS COMPLETOS ENVIADOS POR EL JUEGO:", value: `\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`` }
-                ],
-                footer: { text: "Modo Diagnóstico CDMXRP" },
-                timestamp: new Date().toISOString()
-            }]
-        };
+                // 2. Filtramos ÚNICAMENTE cuando el evento sea una llamada al 911 legítima
+                if (item.event === 'Call911' && item.data) {
+                    const info = item.data;
+                    
+                    // Extraemos los parámetros exactos del API de ERLC
+                    const usuario = info.Player || "Sistema / Anónimo";
+                    const quePaso = info.Message || "Sin detalles especificados.";
+                    const ubicacion = info.Location || "Ubicación Desconocida";
 
-        await axios.post(DISCORD_WEBHOOK_URL, embedDiscord);
+                    const embedDiscord = {
+                        embeds: [{
+                            title: "🚨 CENTRAL DE EMERGENCIAS 911 - CDMXRP 🚨",
+                            color: 16776960, // Amarillo táctico
+                            fields: [
+                                { 
+                                    name: "👤 ¿Quién llamó?", 
+                                    value: `\`\`\`text\n${usuario}\n\`\`\`` 
+                                },
+                                { 
+                                    name: "💬 ¿Qué pasó?", 
+                                    value: `\`\`\`text\n${quePaso}\n\`\`\`` 
+                                },
+                                { 
+                                    name: "📍 Ubicación del Reporte", 
+                                    value: `\`\`\`text\n${ubicacion}\n\`\`\`` 
+                                }
+                            ],
+                            footer: { text: "Sistema de Emergencias - CDMXRP" },
+                            timestamp: new Date().toISOString()
+                        }]
+                    };
+
+                    await axios.post(DISCORD_WEBHOOK_URL, embedDiscord);
+                    console.log(`✅ 911 de ${usuario} enviado con éxito.`);
+                }
+            }
+        }
+
+        // Siempre respondemos 200 a Roblox para que sepa que procesamos todo bien
         res.status(200).send('OK');
 
     } catch (error) {
-        console.error("❌ Error:", error.message);
+        console.error("❌ Error procesando el paquete:", error.message);
         res.status(200).send('OK');
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor de inspección activo en puerto ${PORT}`);
+    console.log(`🚀 Central de Emergencias CDMXRP operativa en puerto ${PORT}`);
 });
